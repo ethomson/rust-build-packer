@@ -1,0 +1,115 @@
+{
+    "variables": {
+        "client_id": "{{env `ARM_CLIENT_ID`}}",
+        "client_secret": "{{env `ARM_CLIENT_SECRET`}}",
+        "subscription_id": "{{env `ARM_SUBSCRIPTION_ID`}}",
+        "resource_group_name": "{{env `ARM_RESOURCE_GROUP_NAME`}}",
+        "storage_account_name": "{{env `ARM_STORAGE_ACCOUNT_NAME`}}",
+        "image_name": "{{env `ARM_IMAGE_NAME`}}",
+        "azure_pipelines_url": "{{env `AZURE_PIPELINES_URL`}}",
+        "azure_pipelines_pool": "{{env `AZURE_PIPELINES_POOL`}}",
+        "azure_pipelines_pat": "{{env `AZURE_PIPELINES_PAT`}}"
+    },
+
+    "sensitive-variables": [ "azure_pipelines_pat" ],
+
+    "builders": [
+        {
+            "type": "azure-arm",
+
+            "client_id": "{{user `client_id`}}",
+            "client_secret": "{{user `client_secret`}}",
+            "subscription_id": "{{user `subscription_id`}}",
+
+            "build_resource_group_name": "{{user `resource_group_name`}}",
+            "managed_image_resource_group_name": "{{user `resource_group_name`}}",
+            "managed_image_name": "{{user `image_name`}}",
+
+            "os_type": "Windows",
+            "image_publisher": "MicrosoftWindowsServer",
+            "image_offer": "WindowsServer",
+            "image_sku": "2019-Datacenter",
+
+            "communicator": "winrm",
+            "winrm_use_ssl": "true",
+            "winrm_insecure": "true",
+            "winrm_username": "packer"
+        }
+    ],
+
+    "provisioners": [
+        {
+            "type": "powershell",
+            "inline": [
+                "mkdir C:\\Temp",
+                "mkdir C:\\Data",
+                "mkdir C:\\Data\\Runner",
+                "mkdir C:\\Data\\Share"
+            ]
+        },
+        {
+            "type": "powershell",
+            "inline": [
+                "(new-object net.webclient).DownloadFile('https://chocolatey.org/install.ps1', 'C:\\Temp\\choco-install.ps1')",
+                "C:\\Temp\\choco-install.ps1",
+                "del C:\\Temp\\choco-install.ps1"
+            ]
+        },
+        {
+            "type": "powershell",
+            "inline": [
+                "Install-WindowsFeature -Name Containers",
+                "Uninstall-WindowsFeature Windows-Defender"
+            ]
+        },
+        {
+            "type": "windows-restart",
+            "restart_timeout": "10m"
+        },
+        {
+            "type": "powershell",
+            "inline": [
+                "Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force",
+                "Install-Module -Name DockerMsftProvider -Repository PSGallery -Force",
+                "Install-Package -Name docker -ProviderName DockerMsftProvider -Force -RequiredVersion 18.09",
+                "Start-Service docker"
+            ]
+        },
+        {
+            "type": "powershell",
+            "inline": [
+                "(new-object net.webclient).DownloadFile('https://vstsagentpackage.azureedge.net/agent/2.153.4/vsts-agent-win-x64-2.153.4.zip', 'C:\\Temp\\agent.zip')",
+                "Expand-Archive -Path C:\\Temp\\Agent.zip -DestinationPath C:\\Data\\Agent",
+                "[System.IO.File]::WriteAllLines('C:\\Data\\Agent\\version.txt', '2.153.4')"
+            ]
+        },
+        {
+            "type": "powershell",
+            "inline": [
+                "(new-object net.webclient).DownloadFile('https://raw.githubusercontent.com/ethomson/rust-build-packer/master/startup.cmd', 'C:\\Data\\Runner\\startup.cmd')",
+                "(new-object net.webclient).DownloadFile('https://raw.githubusercontent.com/ethomson/rust-build-packer/master/run.ps1', 'C:\\Data\\Runner\\run.ps1')",
+                "setx AZURE_PIPELINES_URL {{user `azure_pipelines_url`}} /m",
+                "setx AZURE_PIPELINES_POOL {{user `azure_pipelines_pool`}} /m",
+                "setx AZURE_PIPELINES_PAT {{user `azure_pipelines_pat`}} /m"
+            ]
+        },
+        {
+            "type": "powershell",
+            "inline": [ "docker pull ethomson/azure-pipelines-k8s-win32" ]
+        },
+        {
+            "type": "powershell",
+            "inline": [
+                "schtasks.exe /create /tn BuildAgent /ru SYSTEM /Sc ONSTART /tr C:\\Data\\Runner\\startup.cmd"
+            ]
+        },
+        {
+            "type": "powershell",
+            "inline": [
+                "if( Test-Path $Env:SystemRoot\\System32\\Sysprep\\unattend.xml ){ rm $Env:SystemRoot\\System32\\Sysprep\\unattend.xml -Force}",
+                "& $env:SystemRoot\\System32\\Sysprep\\Sysprep.exe /oobe /generalize /quiet /quit",
+                "while($true) { $imageState = Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Setup\\State | Select ImageState; if($imageState.ImageState -ne 'IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE') { Write-Output $imageState.ImageState; Start-Sleep -s 10  } else { break } }"
+            ]
+        }
+    ]
+}

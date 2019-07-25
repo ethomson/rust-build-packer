@@ -1,6 +1,8 @@
 $Default_Image="ethomson/azure-pipelines-k8s-win32:latest"
 $Default_ShareDir="C:\Data\Share"
 
+$AgentRepo="microsoft/azure-pipelines-agent"
+
 Set-StrictMode -Version Latest
 
 $ErrorActionPreference = "Stop"
@@ -68,7 +70,31 @@ $ret=0
 while ($ret -eq 0) {
 	Write-Host ""
 	Write-Host ":: Updating agent image..."
-    docker pull "${Agent_Image}"
+	docker pull "${Agent_Image}"
+
+	Write-Host ""
+	Write-Host ":: Checking agent version..."
+	$webclient=(new-object net.webclient)
+	$webclient.Headers.Add("User-Agent", "azure-pipelines-build/0.42")
+	$latest_version = ($webclient.DownloadString("https://api.github.com/repos/${AgentRepo}/releases") | ConvertFrom-Json)[0].tag_name -Replace "^v", ""
+
+	if (Test-Path -Path "C:\Data\Agent\version.txt") {
+		$current_version = Get-Content "C:\Data\Agent\version.txt"
+	} else {
+		$current_version = 0;
+	}
+
+	if ($latest_version -ne $current_version) {
+		Write-Host ""
+		Write-Host ":: Upgrading agent to ${latest_version}..."
+
+		$webclient=(new-object net.webclient)
+		$webclient.Headers.Add("User-Agent", "azure-pipelines-build/0.42")
+                $webclient.DownloadFile("https://vstsagentpackage.azureedge.net/agent/${latest_version}/vsts-agent-win-x64-${latest_version}.zip", "C:\Temp\agent.zip")
+
+                Expand-Archive -Path "C:\Temp\Agent.zip" -DestinationPath "C:\Data\Agent" -Force
+                [System.IO.File]::WriteAllLines("C:\Data\\Agent\version.txt", $latest_version)
+	}
 
 	Write-Host ""
 	Write-Host ":: Starting agent..."

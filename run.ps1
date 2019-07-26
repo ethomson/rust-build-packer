@@ -1,6 +1,7 @@
 $Default_Image="ethomson/azure-pipelines-k8s-win32:latest"
 $Default_ShareDir="C:\Data\Share"
 
+$AgentPipelinesAccount = "rust-lang"
 $AgentRepo="microsoft/azure-pipelines-agent"
 
 Set-StrictMode -Version Latest
@@ -74,26 +75,42 @@ while ($ret -eq 0) {
 
 	Write-Host ""
 	Write-Host ":: Checking agent version..."
-	$webclient=(new-object net.webclient)
-	$webclient.Headers.Add("User-Agent", "azure-pipelines-build/0.42")
-	$latest_version = ($webclient.DownloadString("https://api.github.com/repos/${AgentRepo}/releases") | ConvertFrom-Json)[0].tag_name -Replace "^v", ""
+	$currentVersion = $null
+	$latestVersion = $null
+	$latestUrl = $null
 
-	if (Test-Path -Path "C:\Data\Agent\version.txt") {
-		$current_version = Get-Content "C:\Data\Agent\version.txt"
-	} else {
-		$current_version = 0;
+	$webclient=New-Object Net.WebClient
+	$webclient.Headers.Add("User-Agent", "azure-pipelines-build/0.42")
+	$webclient.Headers.Add("Authorization", "Basic " + [Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes("azpagent" + ":" + $Env:AZURE_PIPELINES_PAT)))
+
+	$packages = $webclient.DownloadString("https://dev.azure.com/${AgentPipelinesAccount}/_apis/distributedtask/packages/agent?%24top=1") | ConvertFrom-Json
+
+	foreach ($package in $packages.value) {
+		if ($package.platform -eq "win-x64") {
+			$latestVersion = ($package.version.major, $package.version.minor, $package.version.patch) -Join '.'
+			$latestUrl = $package.downloadUrl
+			break
+		}
 	}
 
-	if ($latest_version -ne $current_version) {
+	if ($latestVersion -eq $null) {
+		Write-Host "!! ERROR: could not get package version"
+	}
+
+	if (Test-Path -Path "C:\Data\Agent\version.txt") {
+		$currentVersion = Get-Content "C:\Data\Agent\version.txt"
+	}
+
+	if ($latestVersion -ne $currentVersion) {
 		Write-Host ""
-		Write-Host ":: Upgrading agent to ${latest_version}..."
+		Write-Host ":: Upgrading agent to ${latestVersion}..."
 
 		$webclient=(new-object net.webclient)
 		$webclient.Headers.Add("User-Agent", "azure-pipelines-build/0.42")
-                $webclient.DownloadFile("https://vstsagentpackage.azureedge.net/agent/${latest_version}/vsts-agent-win-x64-${latest_version}.zip", "C:\Temp\agent.zip")
+                $webclient.DownloadFile($latestUrl, "C:\Temp\agent.zip")
 
                 Expand-Archive -Path "C:\Temp\Agent.zip" -DestinationPath "C:\Data\Agent" -Force
-                [System.IO.File]::WriteAllLines("C:\Data\\Agent\version.txt", $latest_version)
+                [System.IO.File]::WriteAllLines("C:\Data\\Agent\version.txt", $latestVersion)
 	}
 
 	Write-Host ""

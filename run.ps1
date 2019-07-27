@@ -107,10 +107,11 @@ while ($ret -eq 0) {
 
 		$webclient=(new-object net.webclient)
 		$webclient.Headers.Add("User-Agent", "azure-pipelines-build/0.42")
-                $webclient.DownloadFile($latestUrl, "C:\Temp\agent.zip")
+				$webclient.DownloadFile($latestUrl, "C:\Temp\agent.zip")
 
-                Expand-Archive -Path "C:\Temp\Agent.zip" -DestinationPath "C:\Data\Agent" -Force
-                [System.IO.File]::WriteAllLines("C:\Data\\Agent\version.txt", $latestVersion)
+				Expand-Archive -Path "C:\Temp\Agent.zip" -DestinationPath "C:\Data\Agent" -Force
+				[System.IO.File]::WriteAllLines("C:\Data\\Agent\version.txt", $latestVersion)
+				Copy-Item C:\Data\Agent "${Agent_ShareDir}\Agent" -Recurse -Force
 	}
 
 	Write-Host ""

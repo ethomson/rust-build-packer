@@ -30,8 +30,7 @@ function CleanupAgent($path) {
 	}
 }
 
-$Agent_Guid=New-Guid
-if ($Env:AZURE_PIPELINES_AGENT_NAME) { $Agent_Name=$Env:AZURE_PIPELINES_AGENT_NAME } else { $Agent_Name="$(hostname)_${Agent_Guid}" }
+if ($Env:AZURE_PIPELINES_AGENT_NAME) { $Agent_Name=$Env:AZURE_PIPELINES_AGENT_NAME } else { $Agent_Name="$(hostname)" }
 if ($Env:IMAGE) { $Agent_Image=$Env:IMAGE } else { $Agent_Image=$Default_Image }
 if ($Env:SHARE_DIR) { $Agent_ShareDir=$ENV:SHARE_DIR } else { $Agent_ShareDir=$Default_ShareDir }
 
@@ -55,16 +54,6 @@ if (-not $Env:SKIP_RESERVEDAGENT) {
 	CheckLastExitCode
 }
 
-# Set up the actual runner that will do work.
-Write-Host ""
-Write-Host ":: Setting up runner agent (${Agent_Name})..."
-CleanupAgent "${Agent_ShareDir}\Agent"
-Copy-Item C:\Data\Agent "${Agent_ShareDir}\Agent" -Recurse -Force
-
-# Configure the agent; map the shared path as a read-write share so that
-# we can set up the tokens for the actual runner.
-docker run -v "${Agent_MapPath}:${Agent_MapPath}" "${Agent_Image}" powershell """${Agent_ShareDir}\Agent\config.cmd"" --unattended --url ""${Env:AZURE_PIPELINES_URL}"" --pool ""${Env:AZURE_PIPELINES_POOL}"" --agent ""${Agent_Name}"" --auth pat --token ""${Env:AZURE_PIPELINES_PAT}"" --replace"
-CheckLastExitCode
 
 $ret=0
 
@@ -95,6 +84,7 @@ while ($ret -eq 0) {
 
 	if ($latestVersion -eq $null) {
 		Write-Host "!! ERROR: could not get package version"
+		exit 1
 	}
 
 	if (Test-Path -Path "C:\Data\Agent\version.txt") {
@@ -114,6 +104,17 @@ while ($ret -eq 0) {
 		Copy-Item C:\Data\Agent "${Agent_ShareDir}\Agent" -Recurse -Force
 	}
 
+	# Set up the actual runner that will do work.
+	Write-Host ""
+	Write-Host ":: Setting up runner agent (${Agent_Name})..."
+	CleanupAgent "${Agent_ShareDir}\Agent"
+	Copy-Item C:\Data\Agent "${Agent_ShareDir}\Agent" -Recurse -Force
+
+	# Configure the agent; map the shared path as a read-write share so that
+	# we can set up the tokens for the actual runner.
+	docker run -v "${Agent_MapPath}:${Agent_MapPath}" "${Agent_Image}" powershell """${Agent_ShareDir}\Agent\config.cmd"" --unattended --url ""${Env:AZURE_PIPELINES_URL}"" --pool ""${Env:AZURE_PIPELINES_POOL}"" --agent ""${Agent_Name}"" --auth pat --token ""${Env:AZURE_PIPELINES_PAT}"" --replace"
+	CheckLastExitCode
+
 	Write-Host ""
 	Write-Host ":: Starting agent..."
 
@@ -124,12 +125,12 @@ while ($ret -eq 0) {
 
 	$ret=$LastExitCode
 	Write-Host ":: Agent exited with: ${ret}"
-}
 
-Write-Host ""
-Write-Host ":: Cleaning up runner agent..."
-& "${Agent_ShareDir}\Agent\config.cmd" remove --auth pat --token "${Env:AZURE_PIPELINES_PAT}"
-CheckLastExitCode
+	Write-Host ""
+	Write-Host ":: Cleaning up runner agent..."
+	& "${Agent_ShareDir}\Agent\config.cmd" remove --auth pat --token "${Env:AZURE_PIPELINES_PAT}"
+	CheckLastExitCode
+}
 
 echo ":: Exiting (exit code ${ret})"
 exit $ret

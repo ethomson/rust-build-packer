@@ -95,7 +95,7 @@
         },
         {
             "type": "powershell",
-            "inline": [ "docker pull ethomson/azure-pipelines-k8s-win32" ]
+            "inline": [ "docker pull ethomson/rust-build-win32" ]
         },
         {
             "type": "powershell",

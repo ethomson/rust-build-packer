@@ -1,4 +1,4 @@
-$Default_Image="ethomson/azure-pipelines-k8s-win32:latest"
+$Default_Image="ethomson/rust-build-win32:latest"
 $Default_ShareDir="C:\Data\Share"
 
 $AgentPipelinesAccount = "rust-lang"

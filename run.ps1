@@ -125,12 +125,12 @@ while ($ret -eq 0) {
 
 	$ret=$LastExitCode
 	Write-Host ":: Agent exited with: ${ret}"
-
-	Write-Host ""
-	Write-Host ":: Cleaning up runner agent..."
-	& "${Agent_ShareDir}\Agent\config.cmd" remove --auth pat --token "${Env:AZURE_PIPELINES_PAT}"
-	CheckLastExitCode
 }
+
+Write-Host ""
+Write-Host ":: Cleaning up runner agent..."
+& "${Agent_ShareDir}\Agent\config.cmd" remove --auth pat --token "${Env:AZURE_PIPELINES_PAT}"
+CheckLastExitCode
 
 echo ":: Exiting (exit code ${ret})"
 exit $ret

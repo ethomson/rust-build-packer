@@ -32,7 +32,8 @@ function CleanupAgent($path) {
 
 if ($Env:AZURE_PIPELINES_AGENT_NAME) { $Agent_Name=$Env:AZURE_PIPELINES_AGENT_NAME } else { $Agent_Name="$(hostname)" }
 if ($Env:IMAGE) { $Agent_Image=$Env:IMAGE } else { $Agent_Image=$Default_Image }
-if ($Env:SHARE_DIR) { $Agent_ShareDir=$ENV:SHARE_DIR } else { $Agent_ShareDir=$Default_ShareDir }
+if ($Env:SHARE_DIR) { $Agent_ShareDir=$Env:SHARE_DIR } else { $Agent_ShareDir=$Default_ShareDir }
+if ($Env:STORAGE_SIZE) { $Agent_Storage=$Env:STORAGE_SIZE } else { $Agent_Storage="20G" }
 
 $Agent_MapPath=$Agent_ShareDir.replace("\\", "/");
 
@@ -112,7 +113,7 @@ while ($ret -eq 0) {
 
 	# Configure the agent; map the shared path as a read-write share so that
 	# we can set up the tokens for the actual runner.
-	docker run -v "${Agent_MapPath}:${Agent_MapPath}" "${Agent_Image}" powershell """${Agent_ShareDir}\Agent\config.cmd"" --unattended --url ""${Env:AZURE_PIPELINES_URL}"" --pool ""${Env:AZURE_PIPELINES_POOL}"" --agent ""${Agent_Name}"" --auth pat --token ""${Env:AZURE_PIPELINES_PAT}"" --replace"
+	docker run -v "${Agent_MapPath}:${Agent_MapPath}" --storage-opt size="${Agent_Storage}" "${Agent_Image}" powershell """${Agent_ShareDir}\Agent\config.cmd"" --unattended --url ""${Env:AZURE_PIPELINES_URL}"" --pool ""${Env:AZURE_PIPELINES_POOL}"" --agent ""${Agent_Name}"" --auth pat --token ""${Env:AZURE_PIPELINES_PAT}"" --replace"
 	CheckLastExitCode
 
 	Write-Host ""
@@ -121,7 +122,7 @@ while ($ret -eq 0) {
 	# Run the agent; map the shared path as a read-only share so that
 	# the build code is wholly isolated and cannot mutate any shared
 	# state.
-	docker run -v "${Agent_MapPath}:${Agent_MapPath}:ro" "${Agent_Image}" powershell "Copy-Item ""${Agent_ShareDir}\Agent"" C:\ -Recurse ; ""C:\Agent\run.cmd"" --once"
+	docker run -v "${Agent_MapPath}:${Agent_MapPath}:ro" --storage-opt size="${Agent_Storage}" "${Agent_Image}" powershell "Copy-Item ""${Agent_ShareDir}\Agent"" C:\ -Recurse ; ""C:\Agent\run.cmd"" --once"
 
 	$ret=$LastExitCode
 	Write-Host ":: Agent exited with: ${ret}"
